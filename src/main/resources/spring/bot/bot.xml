@@ -1,0 +1,186 @@
+<!--
+  ~ Copyright 2012  Research Studios Austria Forschungsges.m.b.H.
+  ~
+  ~    Licensed under the Apache License, Version 2.0 (the "License");
+  ~    you may not use this file except in compliance with the License.
+  ~    You may obtain a copy of the License at
+  ~
+  ~        http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~    Unless required by applicable law or agreed to in writing, software
+  ~    distributed under the License is distributed on an "AS IS" BASIS,
+  ~    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~    See the License for the specific language governing permissions and
+  ~    limitations under the License.
+  -->
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xmlns:mail="http://www.springframework.org/schema/integration/mail"
+       xmlns:int="http://www.springframework.org/schema/integration"
+       xmlns:util="http://www.springframework.org/schema/util"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans
+        http://www.springframework.org/schema/beans/spring-beans-4.1.xsd
+        http://www.springframework.org/schema/integration/mail
+        http://www.springframework.org/schema/integration/mail/spring-integration-mail.xsd
+        http://www.springframework.org/schema/util
+        http://www.springframework.org/schema/util/spring-util-4.1.xsd">
+
+    <import resource="classpath:spring/component/nodeurisource/nodeurisource-random.xml"/>
+    <import resource="classpath:spring/component/botContext/botContext.xml"/>
+    <import resource="classpath:spring/component/mail/mailContentExtractor.xml"/>
+
+    <util:properties id="javaMailProperties">
+        <prop key="mail.imap.socketFactory.class">javax.net.ssl.SSLSocketFactory</prop>
+        <prop key="mail.imap.socketFactory.fallback">false</prop>
+        <prop key="mail.store.protocol">imaps</prop>
+        <prop key="mail.debug">false</prop>
+        <prop key="mail.smtp.starttls.enable">true</prop>
+        <prop key="mail.smtp.starttls.required">true</prop>
+    </util:properties>
+
+    <mail:inbound-channel-adapter id="imapAdapter"
+                                  store-uri="imaps://${mailbot.email.user}:${mailbot.email.password}@${mailbot.email.imap.host}:${mailbot.email.imap.port}/INBOX"
+                                  channel="receiveEmailChannel"
+                                  should-delete-messages="false"
+                                  should-mark-messages-as-read="true"
+                                  auto-startup="true"
+                                  java-mail-properties="javaMailProperties">
+        <int:poller fixed-rate="300000" max-messages-per-poll="100"/>
+    </mail:inbound-channel-adapter>
+
+    <mail:outbound-channel-adapter id="outboundAdapter"
+                                   auto-startup="true"
+                                   channel="sendEmailChannel"
+                                   host="${mailbot.email.smtp.host}"
+                                   port="${mailbot.email.smtp.port}"
+                                   username="${mailbot.email.user}"
+                                   password="${mailbot.email.password}"
+                                   java-mail-properties="javaMailProperties">
+    </mail:outbound-channel-adapter>
+
+    <int:channel id="receiveEmailChannel"/>
+    <int:channel id="sendEmailChannel"/>
+
+    <int:service-activator input-channel="receiveEmailChannel" ref="mail2wonBot" method="receive"/>
+
+    <bean id="mail2wonBot" class="won.bot.mailbot.impl.MailBot">
+        <property name="botContextWrapper" ref="botContextWrapper"/>
+        <property name="taskScheduler" ref="taskScheduler"/>
+        <property name="receiveEmailChannel" ref="receiveEmailChannel"/>
+        <property name="sendEmailChannel" ref="sendEmailChannel"/>
+        <property name="mailGenerator" ref="mailGenerator"/>
+        <property name="atomProducer">
+            <bean class="won.bot.framework.component.atomproducer.impl.NopAtomProducer" />
+        </property>
+        <property name="trigger">
+            <bean class="org.springframework.scheduling.support.PeriodicTrigger">
+                <constructor-arg name="period" value="60000"/>
+                <constructor-arg name="timeUnit" value="MILLISECONDS"/>
+                <property name="initialDelay" value="10000"/> <!-- wait 10s at the beginning -->
+                <property name="fixedRate" value="false"/>  <!-- fixed delay after completion -->
+            </bean>
+        </property>
+    </bean>
+
+    <bean id="velocityEngine" class="org.springframework.ui.velocity.VelocityEngineFactoryBean">
+        <property name="velocityProperties">
+            <value>
+                resource.loader=file
+                file.resource.loader.class=org.apache.velocity.runtime.resource.loader.ClasspathResourceLoader
+            </value>
+        </property>
+    </bean>
+    <bean id="mailGenerator" class="won.bot.mailbot.util.WonMimeMessageGenerator">
+        <property name="velocityEngine" ref="velocityEngine"/>
+        <property name="sentFrom" value="${mailbot.email.address}"/>
+        <property name="sentFromName" value="${mailbot.email.name}"/>
+        <property name="MAX_CONVERSATION_DEPTH"
+                  value="${mailbot.max_conversation_depth}"/> <!-- 0 includes no messages at all, -1 includes all messages -->
+    </bean>
+
+    <bean id="botContextWrapper" class="won.bot.mailbot.context.MailBotContextWrapper">
+        <constructor-arg name="botContext" ref="${botContext.impl}"/>
+        <constructor-arg name="botName" value="${bot.name}"/>
+    </bean>
+
+    <bean id="mailExtractor" class="won.bot.mailbot.util.MailContentExtractor">
+        <property name="demandTypePattern">
+            <bean id="demandTypePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^\[WANT\].*"/>
+            </bean>
+        </property>
+        <property name="supplyTypePattern">
+            <bean id="supplyTypePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^\[OFFER\].*"/>
+            </bean>
+        </property>
+        <property name="doTogetherTypePattern">
+            <bean id="doTogetherTypePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^\[TOGETHER\].*"/>
+            </bean>
+        </property>
+        <property name="critiqueTypePattern">
+            <bean id="critiqueTypePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^\[CRITIQUE\].*"/>
+            </bean>
+        </property>
+        <property name="tagExtractionPattern">
+            <bean id="tagExtractionPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="[#]+[\w]+\b"/>
+            </bean>
+        </property>
+        <property name="textMessageExtractionPattern">
+            <bean id="textMessageExtractionPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?s).+?(?=\b[^\n]*\n>)"/>
+            </bean>
+        </property>
+        <property name="descriptionExtractionPattern">
+            <bean id="descriptionExtractionPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?s).*"/>
+            </bean>
+        </property>
+        <property name="titleExtractionPattern">
+            <bean id="titleExtractionPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg>
+                    <value><![CDATA[(?s)(?<=\]).*]]></value>
+                </constructor-arg>
+            </bean>
+        </property>
+        <property name="usedForTestingPattern">
+            <bean id="usedForTestingPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value=".*?\[DEBUG\].*?"/>
+            </bean>
+        </property>
+        <property name="cmdTakenPattern">
+            <bean id="cmdTakenPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value=".*?\[TAKEN\].*?"/>
+            </bean>
+        </property>
+        <property name="doNotMatchPattern">
+            <bean id="doNotMatchPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value=".*?\[NO_MATCH\].*?"/>
+            </bean>
+        </property>
+        <property name="cmdClosePattern">
+            <bean id="cmdClosePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^close.*"/>
+            </bean>
+        </property>
+        <property name="cmdConnectPattern">
+            <bean id="cmdConnectPattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^connect.*"/>
+            </bean>
+        </property>
+        <property name="cmdSubscribePattern">
+            <bean id="cmdSubscribePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^subscribe.*"/>
+            </bean>
+        </property>
+        <property name="cmdUnsubscribePattern">
+            <bean id="cmdUnsubscribePattern" class="java.util.regex.Pattern" factory-method="compile">
+                <constructor-arg value="(?si)^unsubscribe.*"/>
+            </bean>
+        </property>
+    </bean>
+</beans>
