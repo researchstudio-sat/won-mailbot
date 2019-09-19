@@ -6,13 +6,13 @@ import won.bot.framework.eventbot.EventListenerContext;
 import won.bot.framework.eventbot.action.BaseEventBotAction;
 import won.bot.framework.eventbot.bus.EventBus;
 import won.bot.framework.eventbot.event.Event;
-import won.bot.framework.eventbot.event.impl.mail.CreateAtomFromMailEvent;
-import won.bot.framework.eventbot.event.impl.mail.MailCommandEvent;
-import won.bot.framework.eventbot.event.impl.mail.MailReceivedEvent;
-import won.bot.framework.eventbot.event.impl.mail.WelcomeMailEvent;
 import won.bot.framework.eventbot.listener.EventListener;
 import won.bot.mailbot.context.MailBotContextWrapper;
 import won.bot.mailbot.enums.SubscribeStatus;
+import won.bot.mailbot.event.CreateAtomFromMailEvent;
+import won.bot.mailbot.event.MailCommandEvent;
+import won.bot.mailbot.event.MailReceivedEvent;
+import won.bot.mailbot.event.WelcomeMailEvent;
 import won.bot.mailbot.util.MailContentExtractor;
 
 import javax.mail.MessagingException;

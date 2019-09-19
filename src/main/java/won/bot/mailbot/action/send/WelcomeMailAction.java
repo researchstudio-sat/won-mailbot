@@ -4,8 +4,8 @@ import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.support.GenericMessage;
 import won.bot.framework.eventbot.action.BaseEventBotAction;
 import won.bot.framework.eventbot.event.Event;
-import won.bot.framework.eventbot.event.impl.mail.WelcomeMailEvent;
 import won.bot.framework.eventbot.listener.EventListener;
+import won.bot.mailbot.event.WelcomeMailEvent;
 import won.bot.mailbot.util.WonMimeMessageGenerator;
 
 /**
